@@ -64,8 +64,8 @@ jobs:
       - name: Test Action
         uses: ./
         with:
-          minikube version: v1.35.0
-          kubernetes version: v1.33.0
+          minikube version: v1.38.0
+          kubernetes version: v1.34.4
           github token: ${{ secrets.GITHUB_TOKEN }}
           start args: '--addons=registry --addons=metrics-server'
       - name: Validate Minikube
@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        kubernetes: [v1.29.14,v1.28.15,v1.27.16,v1.26.15,v1.25.16,v1.24.17,v1.23.17,v1.22.17]
+        kubernetes: [v1.29.14,v1.28.15,v1.27.16,v1.26.15,v1.25.16,v1.24.17]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
