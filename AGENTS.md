@@ -70,10 +70,18 @@ action.yml              # GitHub Action definition
 
 ### Key Dependencies
 
+**npm packages (in `package.json`):**
 - `@actions/core` - Action inputs, outputs, and logging
 - `@actions/tool-cache` - Binary downloads and caching
 - `@actions/io` - File system operations
 - `axios` - HTTP requests to GitHub API
+
+**Binary dependencies (pinned versions in `src/download.js`):**
+- **CNI plugins** (`containernetworking/plugins`) - Required by cri-dockerd and recent Minikube releases for container networking
+- **cri-tools / crictl** (`kubernetes-sigs/cri-tools`) - CRI CLI tool for interacting with container runtimes
+- **cri-dockerd** (`Mirantis/cri-dockerd`) - CRI shim for Docker Engine
+
+These binaries are downloaded at runtime from GitHub releases. Their versions are hardcoded as `const tag = '...'` values in `src/download.js` (not in `package.json`).
 
 ## Code Style
 
@@ -211,6 +219,18 @@ describe('UserService', () => {
 **DevDependency updates** (jest, prettier, husky) only change `package.json` and `package-lock.json` since they are pruned from `node_modules/` before committing.
 
 **Production dependency updates** (axios, @actions/core, @actions/tool-cache, etc.) change `package.json`, `package-lock.json`, AND files within `node_modules/`.
+
+#### Binary dependency updates (CNI plugins, cri-tools, cri-dockerd)
+
+These are **not** npm packages. Their versions are hardcoded in `src/download.js` as `const tag = '...'` values, and they also have matching version strings in `src/__tests__/download.test.js`.
+
+**To update a binary dependency:**
+
+1. Check the latest release on the corresponding GitHub repo
+2. Update the `const tag` value in `src/download.js`
+3. Update the matching URL in `src/__tests__/download.test.js`
+4. Run tests: `npm test`
+5. **Create a separate pull request** (not just a commit) for each binary dependency update — these changes require E2E validation via the `runner.yml` workflow to verify Minikube still starts correctly with the new versions
 
 ### Releasing a New Version
 
