@@ -188,13 +188,29 @@ describe('UserService', () => {
 
 ### Updating Dependencies
 
-1. Update version in `package.json` or `src/*.js`
-2. Run `npm install`
-3. Test with `npm test` and `npm run format-check`
-4. **Before committing**: Run `npm prune --omit=dev` to remove devDependencies
-5. Commit changes including `node_modules/` (required for GitHub Actions - only production deps)
+**CRITICAL**: This is a GitHub Action. `node_modules/` is committed to the repository with production dependencies only. Every dependency update commit must include the updated `node_modules/` contents for production dependencies.
 
-**Important**: GitHub Actions run directly from the repository, so `node_modules/` must be committed. However, only production dependencies should be included. Always prune devDependencies before committing.
+**For each dependency update, follow this exact sequence:**
+
+1. Start from a clean git state (no uncommitted changes)
+2. Install the updated package: `npm install <package>@<version> --save-exact --ignore-scripts`
+3. Install all dependencies (needed for testing): `npm install --ignore-scripts`
+4. Run tests: `npm test`
+5. Run format check: `npm run format-check` (if updating prettier, run `npm run format` first and include reformatted source files in the commit)
+6. **Prune devDependencies**: `npm prune --omit=dev --ignore-scripts`
+7. Stage and commit: `git add package.json package-lock.json node_modules/` (and any reformatted source files)
+8. Create one commit per dependency update
+
+**Common mistakes to avoid:**
+- **Forgetting to commit `node_modules/`**: The action runs directly from the repo, so `node_modules/` must always be committed with production deps
+- **Committing devDependencies in `node_modules/`**: Always run `npm prune --omit=dev` before staging `node_modules/`
+- **Mixing multiple dependency updates in one commit**: Update and commit each dependency separately
+- **Running `npm test` after pruning**: Jest is a devDependency, so tests must run before `npm prune --omit=dev`
+- **Not running format check after updating prettier**: New prettier versions may reformat existing code — run `npm run format` and include those changes in the commit
+
+**DevDependency updates** (jest, prettier, husky) only change `package.json` and `package-lock.json` since they are pruned from `node_modules/` before committing.
+
+**Production dependency updates** (axios, @actions/core, @actions/tool-cache, etc.) change `package.json`, `package-lock.json`, AND files within `node_modules/`.
 
 ### Releasing a New Version
 
