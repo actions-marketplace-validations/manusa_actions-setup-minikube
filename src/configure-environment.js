@@ -8,7 +8,9 @@ const RETRY_WAIT_MILLIS = 5_000;
 
 const waitForDocker = async (attempt = 0) => {
   try {
-    logExecSync(`docker version -f '{{.Server.Version}} - {{.Client.Version}}'`);
+    logExecSync(
+      `docker version -f '{{.Server.Version}} - {{.Client.Version}}'`
+    );
     core.info('Docker daemon is ready');
     return true;
   } catch (e) {
