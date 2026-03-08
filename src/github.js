@@ -7,7 +7,7 @@ const gitHubRequest = async ({url, githubToken, options = {}}) => {
   if (githubToken) {
     headers.Authorization = `token ${githubToken}`;
   }
-  return axios({method: 'GET', url, headers, ...options});
+  return axios({method: 'GET', ...options, url, headers});
 };
 
 module.exports = {gitHubRequest};

@@ -11,7 +11,7 @@ const minikubeSupportedVersions = minikubeDirectory =>
   execSync(`${minikubeDirectory}/minikube config defaults kubernetes-version`)
     .toString()
     .split('\n')
-    .map(v => v.replace('* ', '').trim())
+    .map(v => v.replace(/^\*\s*/, '').trim())
     .filter(v => v.length > 0);
 
 const kubernetesReleaseExists = async (version, githubToken) => {
