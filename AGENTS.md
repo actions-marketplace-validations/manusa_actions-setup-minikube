@@ -239,9 +239,23 @@ These are **not** npm packages. Their versions are hardcoded in `src/download.js
 
 ### Releasing a New Version
 
-1. Update version in `package.json`
-2. Create release commit and tag
-3. Husky post-commit hook handles `node_modules` pruning
+Releases use lightweight tags and a commit message format of `[RELEASE] Release v<version>`. The release commit must update exactly 4 files: `package.json`, `package-lock.json`, `node_modules/.package-lock.json`, and `README.md`.
+
+**Follow this exact sequence:**
+
+1. Bump the version in `package.json`
+2. Update the action reference in `README.md` (e.g., `manusa/actions-setup-minikube@v2.16.0` → `@v2.16.1`)
+3. Regenerate `package-lock.json`: `npm install --ignore-scripts --package-lock-only`
+4. **Prune devDependencies** so `node_modules/.package-lock.json` only contains the version bump (not dev deps): `npm prune --omit=dev --ignore-scripts`
+5. Stage all 4 files: `git add package.json package-lock.json node_modules/.package-lock.json README.md`
+6. Commit with sign-off: `git commit --signoff -m "[RELEASE] Release v<version>"`
+7. Create a lightweight tag: `git tag v<version>`
+8. Push: `git push origin master --tags`
+
+**Common mistakes to avoid:**
+- **Forgetting to prune dev deps before staging**: `node_modules/.package-lock.json` will have a huge diff with all dev dependencies instead of just the version bump
+- **Forgetting `package-lock.json` and `node_modules/.package-lock.json`**: Both lock files must be in the release commit — check against previous releases (e.g., `git show e5e04be --stat`)
+- **Running `npm install` instead of `--package-lock-only`**: This reinstalls dev deps into `node_modules/`, requiring another prune
 
 ## Troubleshooting
 
