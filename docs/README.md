@@ -7,6 +7,7 @@ Living documentation for the project's architecture and features:
 | Spec | Description | Status |
 |------|-------------|--------|
 | **[Architecture](specs/architecture.md)** | Execution model, module system, committed node_modules, pipeline design | In progress (CJS→ESM migration) |
+| **[Testing](specs/testing.md)** | Behavioral testing strategy, HTTP test server, mock boundaries, test organization | In progress (behavioral refactoring) |
 
 ## Additional Documentation
 

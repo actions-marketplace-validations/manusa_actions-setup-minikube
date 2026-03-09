@@ -292,3 +292,4 @@ Specs serve as the authoritative reference for:
 | Feature | Spec | Status | Covers |
 |---------|------|--------|--------|
 | Architecture | `docs/specs/architecture.md` | In progress (CJS→ESM migration) | Execution model, module system, committed node_modules, pipeline design |
+| Testing | `docs/specs/testing.md` | In progress (behavioral refactoring) | Behavioral testing strategy, HTTP test server, mock boundaries, test organization |
