@@ -163,12 +163,12 @@ This pattern is:
 |-----------|-------|-------|----------|
 | `check-environment.test.js` | 7 | fs (selective) | Behavioral |
 | `check-kubernetes-version.test.js` | 8 | core, exec, github | Behavioral |
-| `configure-environment.test.js` | 10 | exec, download | Implementation detail |
+| `configure-environment.test.js` | 11 | exec, download | Behavioral |
 | `download.test.js` | 19 | core, github, exec | Behavioral |
 | `error-handler.test.js` | 3 | core | Behavioral |
 | `exec.test.js` | 5 | none | Behavioral |
 | `github.test.js` | 6 | none | Behavioral |
-| `install.test.js` | 10 | core, io, path, exec, check-k8s | Mixed |
+| `install.test.js` | 17 | core, io, exec, check-k8s | Behavioral |
 | `load-inputs.test.js` | 8 | none | Behavioral |
 
 ### ESM Test Conversion
@@ -192,7 +192,7 @@ Jest ESM requires the `--experimental-vm-modules` Node.js flag. The `jest.unstab
 | Phase 2 | Refactor `load-inputs.test.js` and `error-handler.test.js` — style improvements | Done |
 | Phase 3 | Refactor `check-kubernetes-version.test.js` and `download.test.js` — HTTP test server + reduced mocks | Done |
 | Phase 4 | Refactor `check-environment.test.js` and `exec.test.js` — behavioral style, keep boundary mocks | Done |
-| Phase 5 | Refactor `configure-environment.test.js` and `install.test.js` — behavioral style with boundary mocks | Not started |
+| Phase 5 | Refactor `configure-environment.test.js` and `install.test.js` — behavioral style with boundary mocks | Done |
 | Phase 6 | Convert all tests to ESM syntax (bridge to architecture ESM migration Phase 2) | Not started |
 
 Phases 1–5 are done while still on CJS. Phase 6 converts to ESM and connects with the [architecture migration](architecture.md#implementation-progress).

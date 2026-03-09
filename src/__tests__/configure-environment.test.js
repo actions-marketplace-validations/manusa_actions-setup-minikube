@@ -1,92 +1,97 @@
-describe('configure-docker module test suite', () => {
-  let download;
+'use strict';
+
+describe('configureEnvironment', () => {
   let configureEnvironment;
   let logExecSync;
+  let download;
+
   beforeEach(() => {
     jest.resetModules();
+    jest.mock('@actions/core');
     jest.mock('../exec');
     jest.mock('../download');
-    download = require('../download');
     configureEnvironment = require('../configure-environment');
     logExecSync = require('../exec').logExecSync;
+    download = require('../download');
+    logExecSync.mockImplementation(() => {});
+    download.installCniPlugins.mockResolvedValue();
+    download.installCriCtl.mockResolvedValue();
+    download.installCriDockerd.mockResolvedValue();
   });
-  describe('configureEnvironment', () => {
-    beforeEach(() => {
-      logExecSync.mockImplementation(() => {});
+
+  describe('common setup', () => {
+    beforeEach(async () => {
+      await configureEnvironment({driver: 'docker'});
     });
-    describe('with driver=docker', () => {
-      beforeEach(() => {
-        configureEnvironment({driver: 'docker'});
-      });
-      test('installs conntrack', () => {
-        expect(logExecSync).toHaveBeenCalledWith('sudo apt update -y');
-        expect(logExecSync).toHaveBeenCalledWith(
-          'sudo apt-get install -y conntrack'
-        );
-      });
-      test('disables fs protection (HOST_JUJU_LOCK_PERMISSION with minikube 1.31)', () => {
-        expect(logExecSync).toHaveBeenCalledWith(
-          'sudo sysctl fs.protected_regular=0'
-        );
-      });
-      test('waits for docker to be ready', () => {
-        expect(logExecSync).toHaveBeenCalledWith(
-          "docker version -f '{{.Server.Version}} - {{.Client.Version}}'"
-        );
-      });
-      test('doesn\t install cni plugins', () => {
-        expect(download.installCniPlugins).not.toHaveBeenCalled();
-      });
+
+    test('installs conntrack', () => {
+      expect(logExecSync).toHaveBeenCalledWith(
+        expect.stringContaining('conntrack')
+      );
     });
-    describe('with driver=undefined', () => {
-      beforeEach(() => {
-        configureEnvironment();
-      });
-      test('installs conntrack', () => {
-        expect(logExecSync).toHaveBeenCalledWith('sudo apt update -y');
-        expect(logExecSync).toHaveBeenCalledWith(
-          'sudo apt-get install -y conntrack'
-        );
-      });
-      test('disables fs protection (HOST_JUJU_LOCK_PERMISSION with minikube 1.31)', () => {
-        expect(logExecSync).toHaveBeenCalledWith(
-          'sudo sysctl fs.protected_regular=0'
-        );
-      });
-      test('installs cni plugins', () => {
-        expect(download.installCniPlugins).toHaveBeenCalledTimes(1);
-      });
-      test('installs crictl', () => {
-        expect(download.installCriCtl).toHaveBeenCalledTimes(1);
-      });
-      test('installs cri-dockerd', () => {
-        expect(download.installCriDockerd).toHaveBeenCalledTimes(1);
-      });
+
+    test('disables fs.protected_regular', () => {
+      expect(logExecSync).toHaveBeenCalledWith(
+        expect.stringContaining('fs.protected_regular=0')
+      );
     });
-    describe('with driver=none', () => {
-      beforeEach(() => {
-        configureEnvironment({driver: 'none'});
-      });
-      test('installs conntrack', () => {
-        expect(logExecSync).toHaveBeenCalledWith('sudo apt update -y');
-        expect(logExecSync).toHaveBeenCalledWith(
-          'sudo apt-get install -y conntrack'
-        );
-      });
-      test('disables fs protection (HOST_JUJU_LOCK_PERMISSION with minikube 1.31)', () => {
-        expect(logExecSync).toHaveBeenCalledWith(
-          'sudo sysctl fs.protected_regular=0'
-        );
-      });
-      test('installs cni plugins', () => {
-        expect(download.installCniPlugins).toHaveBeenCalledTimes(1);
-      });
-      test('installs crictl', () => {
-        expect(download.installCriCtl).toHaveBeenCalledTimes(1);
-      });
-      test('installs cri-dockerd', () => {
-        expect(download.installCriDockerd).toHaveBeenCalledTimes(1);
-      });
+  });
+
+  describe('with driver=docker', () => {
+    beforeEach(async () => {
+      await configureEnvironment({driver: 'docker'});
+    });
+
+    test('checks docker availability', () => {
+      expect(logExecSync).toHaveBeenCalledWith(
+        expect.stringContaining('docker version')
+      );
+    });
+
+    test('does not install CNI plugins', () => {
+      expect(download.installCniPlugins).not.toHaveBeenCalled();
+    });
+
+    test('does not install crictl', () => {
+      expect(download.installCriCtl).not.toHaveBeenCalled();
+    });
+
+    test('does not install cri-dockerd', () => {
+      expect(download.installCriDockerd).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('with driver=none', () => {
+    beforeEach(async () => {
+      await configureEnvironment({driver: 'none'});
+    });
+
+    test('installs CNI plugins', () => {
+      expect(download.installCniPlugins).toHaveBeenCalledTimes(1);
+    });
+
+    test('installs crictl', () => {
+      expect(download.installCriCtl).toHaveBeenCalledTimes(1);
+    });
+
+    test('installs cri-dockerd', () => {
+      expect(download.installCriDockerd).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not check docker availability', () => {
+      expect(logExecSync).not.toHaveBeenCalledWith(
+        expect.stringContaining('docker version')
+      );
+    });
+  });
+
+  describe('with no driver specified', () => {
+    beforeEach(async () => {
+      await configureEnvironment();
+    });
+
+    test('treats undefined driver as none', () => {
+      expect(download.installCniPlugins).toHaveBeenCalledTimes(1);
     });
   });
 });
