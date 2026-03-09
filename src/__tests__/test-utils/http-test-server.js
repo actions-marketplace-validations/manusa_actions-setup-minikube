@@ -36,9 +36,17 @@ const createHttpTestServer = () => {
         if (handler) {
           try {
             const result = await handler(request);
-            const status = result.status ?? 200;
-            const responseBody = result.body ?? result;
-            sendJson(res, status, responseBody);
+            if (result.binary) {
+              res.writeHead(result.status ?? 200, {
+                'Content-Type': 'application/octet-stream',
+                ...result.headers
+              });
+              res.end(result.binary);
+            } else {
+              const status = result.status ?? 200;
+              const responseBody = result.body ?? result;
+              sendJson(res, status, responseBody);
+            }
           } catch (err) {
             sendJson(res, 500, {error: err.message});
           }

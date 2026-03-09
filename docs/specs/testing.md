@@ -162,14 +162,14 @@ This pattern is:
 | Test File | Tests | Mocks | Approach |
 |-----------|-------|-------|----------|
 | `check-environment.test.js` | 6 | fs | Implementation detail |
-| `check-kubernetes-version.test.js` | 8 | core, exec, github | Mixed |
+| `check-kubernetes-version.test.js` | 8 | core, exec, github | Behavioral |
 | `configure-environment.test.js` | 10 | exec, download | Implementation detail |
-| `download.test.js` | 19 | fs, tool-cache, core, github, exec | Implementation detail |
-| `error-handler.test.js` | 1 | core, console | Behavioral |
+| `download.test.js` | 19 | core, github, exec | Behavioral |
+| `error-handler.test.js` | 3 | core | Behavioral |
 | `exec.test.js` | 2 | child_process | Implementation detail |
-| `github.test.js` | 3 | axios | Behavioral |
+| `github.test.js` | 6 | none | Behavioral |
 | `install.test.js` | 10 | core, io, path, exec, check-k8s | Mixed |
-| `load-inputs.test.js` | 4 | none | Behavioral |
+| `load-inputs.test.js` | 8 | none | Behavioral |
 
 ### ESM Test Conversion
 
@@ -190,7 +190,7 @@ Jest ESM requires the `--experimental-vm-modules` Node.js flag. The `jest.unstab
 |-------|-------------|--------|
 | Phase 1 | Create HTTP test server utility, refactor `github.test.js` to fully behavioral | Done |
 | Phase 2 | Refactor `load-inputs.test.js` and `error-handler.test.js` — style improvements | Done |
-| Phase 3 | Refactor `check-kubernetes-version.test.js` and `download.test.js` — HTTP test server + reduced mocks | Not started |
+| Phase 3 | Refactor `check-kubernetes-version.test.js` and `download.test.js` — HTTP test server + reduced mocks | Done |
 | Phase 4 | Refactor `check-environment.test.js` and `exec.test.js` — behavioral style, keep boundary mocks | Not started |
 | Phase 5 | Refactor `configure-environment.test.js` and `install.test.js` — behavioral style with boundary mocks | Not started |
 | Phase 6 | Convert all tests to ESM syntax (bridge to architecture ESM migration Phase 2) | Not started |
