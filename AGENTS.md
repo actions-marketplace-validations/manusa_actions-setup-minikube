@@ -258,3 +258,32 @@ E2E tests in `runner.yml` require GitHub Actions environment. Check:
 ### Action Fails with "Unsupported OS"
 
 The action only supports Ubuntu Linux. Check `src/check-environment.js` for supported versions.
+
+## Feature Specifications
+
+Feature specs in `docs/specs/` are **living documentation** that describe architectural decisions and planned features. Unlike ADRs (which are point-in-time decisions), specs are updated whenever the feature or architecture changes.
+
+### Purpose
+
+Specs serve as the authoritative reference for:
+- **Architecture**: Execution model, module system, dependency management
+- **Requirements**: What the feature must do (testable statements)
+- **Configuration**: Dependencies, versions, constraints
+
+### When to Read Specs
+
+**Before modifying a feature**: Read its spec to understand current behavior, requirements, and constraints. The spec tells you what invariants must be preserved.
+
+**Before implementing related features**: Specs document integration points and dependencies.
+
+### When to Update Specs
+
+**After changing a feature**: If you modify behavior, architecture, or configuration, update the spec to match. The spec must always reflect the current implementation.
+
+**After adding requirements**: New requirements discovered during implementation should be documented.
+
+### Available Specs
+
+| Feature | Spec | Status | Covers |
+|---------|------|--------|--------|
+| Architecture | `docs/specs/architecture.md` | In progress (CJS→ESM migration) | Execution model, module system, committed node_modules, pipeline design |
