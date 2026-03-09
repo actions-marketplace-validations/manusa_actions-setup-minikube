@@ -2,7 +2,7 @@
 
 const core = require('@actions/core');
 const execSync = require('./exec').execSync;
-const {gitHubRequest} = require('./github');
+const {gitHubRequest, apiBaseUrl} = require('./github');
 
 const SUPPORTED = 'supported';
 const UNSUPPORTED = 'unsupported';
@@ -16,7 +16,7 @@ const minikubeSupportedVersions = minikubeDirectory =>
 
 const kubernetesReleaseExists = async (version, githubToken) => {
   const response = await gitHubRequest({
-    url: `https://api.github.com/repos/kubernetes/kubernetes/releases/tags/${version}`,
+    url: `${apiBaseUrl}/repos/kubernetes/kubernetes/releases/tags/${version}`,
     githubToken,
     options: {validateStatus: status => status === 200 || status === 404}
   });

@@ -4,7 +4,7 @@ const core = require('@actions/core');
 const tc = require('@actions/tool-cache');
 const fs = require('node:fs');
 const {logExecSync} = require('./exec');
-const {gitHubRequest} = require('./github');
+const {gitHubRequest, apiBaseUrl, serverBaseUrl} = require('./github');
 
 const isLinux = name => name.indexOf('linux') >= 0;
 const isAmd64 = name => name.indexOf('amd64') >= 0;
@@ -36,7 +36,7 @@ const downloadMinikube = async (inputs = {}) => {
   core.info(`Downloading Minikube  ${inputs.minikubeVersion}`);
   return downloadGitHubArtifact({
     inputs,
-    releaseUrl: `https://api.github.com/repos/kubernetes/minikube/releases/tags/${inputs.minikubeVersion}`,
+    releaseUrl: `${apiBaseUrl}/repos/kubernetes/minikube/releases/tags/${inputs.minikubeVersion}`,
     assetPredicate: asset =>
       isLinux(asset.name) && isAmd64(asset.name) && !isSignature(asset.name)
   });
@@ -50,7 +50,7 @@ const installCniPlugins = async (inputs = {}) => {
   const tag = 'v1.9.0';
   const tar = await downloadGitHubArtifact({
     inputs,
-    releaseUrl: `https://api.github.com/repos/containernetworking/plugins/releases/tags/${tag}`,
+    releaseUrl: `${apiBaseUrl}/repos/containernetworking/plugins/releases/tags/${tag}`,
     assetPredicate: asset =>
       isLinux(asset.name) &&
       isAmd64(asset.name) &&
@@ -69,7 +69,7 @@ const installCriCtl = async (inputs = {}) => {
   const tag = 'v1.35.0';
   const tar = await downloadGitHubArtifact({
     inputs,
-    releaseUrl: `https://api.github.com/repos/kubernetes-sigs/cri-tools/releases/tags/${tag}`,
+    releaseUrl: `${apiBaseUrl}/repos/kubernetes-sigs/cri-tools/releases/tags/${tag}`,
     assetPredicate: asset =>
       isLinux(asset.name) &&
       isAmd64(asset.name) &&
@@ -86,7 +86,7 @@ const installCriDockerd = async (inputs = {}) => {
   // const tag = tagInfo.data.name;
   // const releaseUrl = 'https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest';
   const tag = 'v0.3.24';
-  const releaseUrl = `https://api.github.com/repos/Mirantis/cri-dockerd/releases/tags/${tag}`;
+  const releaseUrl = `${apiBaseUrl}/repos/Mirantis/cri-dockerd/releases/tags/${tag}`;
   const binaryTar = await downloadGitHubArtifact({
     inputs,
     releaseUrl,
@@ -107,7 +107,7 @@ const installCriDockerd = async (inputs = {}) => {
   logExecSync(`sudo ln -sf /usr/local/bin/cri-dockerd /usr/bin/cri-dockerd`);
   // Service file
   const sourceTar = await tc.downloadTool(
-    `https://github.com/Mirantis/cri-dockerd/archive/refs/tags/${tag}.tar.gz`
+    `${serverBaseUrl}/Mirantis/cri-dockerd/archive/refs/tags/${tag}.tar.gz`
   );
   const sourceDir = await tc.extractTar(sourceTar);
   const sourceContent = firstDir(sourceDir);

@@ -1,22 +1,42 @@
 'use strict';
 
+const {createHttpTestServer} = require('./test-utils/http-test-server');
+
+jest.mock('../exec');
+
 describe('checkKubernetesVersion', () => {
+  let testServer;
+  let baseUrl;
   let exec;
-  let github;
   let checkKubernetesVersion;
+
+  beforeAll(async () => {
+    testServer = createHttpTestServer();
+    const port = await testServer.start();
+    baseUrl = `http://127.0.0.1:${port}`;
+  });
+
+  afterAll(async () => {
+    await testServer.stop();
+  });
 
   beforeEach(() => {
     jest.resetModules();
-    jest.mock('@actions/core');
-    jest.mock('../exec');
-    jest.mock('../github');
+    process.env.GITHUB_API_URL = baseUrl;
+
     exec = require('../exec');
-    github = require('../github');
     checkKubernetesVersion =
       require('../check-kubernetes-version').checkKubernetesVersion;
     exec.execSync.mockReturnValue(
       Buffer.from('* v1.35.2\n* v1.34.3\n* v1.33.7\n')
     );
+
+    testServer.clearRoutes();
+    testServer.clearRequests();
+  });
+
+  afterEach(() => {
+    delete process.env.GITHUB_API_URL;
   });
 
   describe('when version is in minikube supported list', () => {
@@ -31,13 +51,16 @@ describe('checkKubernetesVersion', () => {
       await checkKubernetesVersion('/minikube-dir', {
         kubernetesVersion: 'v1.35.2'
       });
-      expect(github.gitHubRequest).not.toHaveBeenCalled();
+      expect(testServer.getRequests()).toHaveLength(0);
     });
   });
 
   describe('when version is not in supported list but exists on GitHub', () => {
     beforeEach(() => {
-      github.gitHubRequest.mockResolvedValue({status: 200});
+      testServer.get('/repos/kubernetes/kubernetes/releases/tags/*', () => ({
+        status: 200,
+        body: {tag_name: 'v1.99.0'}
+      }));
     });
 
     test('returns UNSUPPORTED', async () => {
@@ -52,15 +75,19 @@ describe('checkKubernetesVersion', () => {
         kubernetesVersion: 'v1.99.0',
         githubToken: 'test-token'
       });
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({githubToken: 'test-token'})
-      );
+      const apiRequest = testServer
+        .getRequests()
+        .find(r => r.pathname.includes('/releases/tags/'));
+      expect(apiRequest.headers.authorization).toBe('token test-token');
     });
   });
 
   describe('when version is not in supported list and not on GitHub', () => {
     beforeEach(() => {
-      github.gitHubRequest.mockResolvedValue({status: 404});
+      testServer.get('/repos/kubernetes/kubernetes/releases/tags/*', () => ({
+        status: 404,
+        body: {message: 'Not Found'}
+      }));
     });
 
     test('throws with the requested version', async () => {
@@ -82,7 +109,10 @@ describe('checkKubernetesVersion', () => {
 
   describe('partial version matching', () => {
     beforeEach(() => {
-      github.gitHubRequest.mockResolvedValue({status: 200});
+      testServer.get('/repos/kubernetes/kubernetes/releases/tags/*', () => ({
+        status: 200,
+        body: {tag_name: 'v1.3'}
+      }));
     });
 
     test('v1.3 does not match v1.35.2', async () => {

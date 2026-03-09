@@ -6,9 +6,7 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const {createHttpTestServer} = require('./test-utils/http-test-server');
 
-// Only mock modules with hardcoded external URLs or system commands
-jest.mock('../github');
-jest.mock('@actions/core');
+// Only mock system commands that require root/sudo
 jest.mock('../exec');
 
 const SERVICE_FILE_CONTENT =
@@ -36,7 +34,6 @@ describe('download module', () => {
   let testServer;
   let baseUrl;
   let download;
-  let github;
   let tc;
   let exec;
   let tmpDir;
@@ -55,8 +52,9 @@ describe('download module', () => {
     jest.resetModules();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'download-test-'));
     process.env.RUNNER_TEMP = tmpDir;
+    process.env.GITHUB_API_URL = baseUrl;
+    process.env.GITHUB_SERVER_URL = baseUrl;
 
-    github = require('../github');
     exec = require('../exec');
     download = require('../download');
     tc = require('@actions/tool-cache');
@@ -68,31 +66,31 @@ describe('download module', () => {
   afterEach(() => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
     delete process.env.RUNNER_TEMP;
+    delete process.env.GITHUB_API_URL;
+    delete process.env.GITHUB_SERVER_URL;
   });
 
   describe('downloadMinikube', () => {
     beforeEach(() => {
+      testServer.get('/repos/kubernetes/minikube/releases/tags/v1.33.7', {
+        assets: [
+          {
+            name: 'minikube-windows-amd64.exe',
+            browser_download_url: `${baseUrl}/download/minikube-windows`
+          },
+          {
+            name: 'minikube-linux-amd64',
+            browser_download_url: `${baseUrl}/download/minikube-linux-amd64`
+          },
+          {
+            name: 'minikube-linux-amd64.sha256',
+            browser_download_url: `${baseUrl}/download/minikube-sha256`
+          }
+        ]
+      });
       testServer.get('/download/minikube-linux-amd64', () => ({
         binary: Buffer.from('fake-minikube-binary')
       }));
-      github.gitHubRequest.mockResolvedValue({
-        data: {
-          assets: [
-            {
-              name: 'minikube-windows-amd64.exe',
-              browser_download_url: `${baseUrl}/download/minikube-windows`
-            },
-            {
-              name: 'minikube-linux-amd64',
-              browser_download_url: `${baseUrl}/download/minikube-linux-amd64`
-            },
-            {
-              name: 'minikube-linux-amd64.sha256',
-              browser_download_url: `${baseUrl}/download/minikube-sha256`
-            }
-          ]
-        }
-      });
     });
 
     test('downloads file to disk', async () => {
@@ -104,17 +102,23 @@ describe('download module', () => {
 
     test('selects linux amd64 binary, not windows or checksum', async () => {
       await download.downloadMinikube({minikubeVersion: 'v1.33.7'});
-      const requests = testServer.getRequests();
-      expect(requests).toHaveLength(1);
-      expect(requests[0].pathname).toBe('/download/minikube-linux-amd64');
+      const downloadRequests = testServer
+        .getRequests()
+        .filter(r => r.pathname.startsWith('/download/'));
+      expect(downloadRequests).toHaveLength(1);
+      expect(downloadRequests[0].pathname).toBe(
+        '/download/minikube-linux-amd64'
+      );
     });
 
     test('queries the minikube release tag', async () => {
       await download.downloadMinikube({minikubeVersion: 'v1.33.7'});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: expect.stringContaining('/minikube/releases/tags/v1.33.7')
-        })
+      expect(testServer.getRequests()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pathname: '/repos/kubernetes/minikube/releases/tags/v1.33.7'
+          })
+        ])
       );
     });
 
@@ -123,9 +127,10 @@ describe('download module', () => {
         minikubeVersion: 'v1.33.7',
         githubToken: 'secret-token'
       });
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({githubToken: 'secret-token'})
-      );
+      const apiRequest = testServer
+        .getRequests()
+        .find(r => r.pathname.includes('/releases/tags/'));
+      expect(apiRequest.headers.authorization).toBe('token secret-token');
     });
   });
 
@@ -140,11 +145,9 @@ describe('download module', () => {
     });
 
     beforeEach(() => {
-      testServer.get('/download/cni-plugins.tgz', () => ({
-        binary: cniTarball
-      }));
-      github.gitHubRequest.mockResolvedValue({
-        data: {
+      testServer.get(
+        '/repos/containernetworking/plugins/releases/tags/v1.9.0',
+        {
           assets: [
             {
               name: 'cni-plugins-linux-amd64-v1.9.0.tgz.sha1',
@@ -164,17 +167,16 @@ describe('download module', () => {
             }
           ]
         }
-      });
-      jest.spyOn(tc, 'extractTar');
-    });
-
-    afterEach(() => {
-      tc.extractTar.mockRestore();
+      );
+      testServer.get('/download/cni-plugins.tgz', () => ({
+        binary: cniTarball
+      }));
     });
 
     test('extracts plugin binaries from downloaded tarball', async () => {
       await download.installCniPlugins({});
-      const extractedDir = await tc.extractTar.mock.results[0].value;
+      const installCmd = exec.logExecSync.mock.calls[0][0];
+      const extractedDir = installCmd.match(/sudo find (\S+)/)[1];
       expect(fs.readdirSync(extractedDir)).toEqual(
         expect.arrayContaining(['bridge', 'loopback'])
       );
@@ -189,20 +191,21 @@ describe('download module', () => {
 
     test('requests the pinned release tag', async () => {
       await download.installCniPlugins({});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: expect.stringContaining(
-            '/containernetworking/plugins/releases/tags/v1.9.0'
-          )
-        })
+      expect(testServer.getRequests()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pathname: '/repos/containernetworking/plugins/releases/tags/v1.9.0'
+          })
+        ])
       );
     });
 
     test('forwards github token', async () => {
       await download.installCniPlugins({githubToken: 'secret-token'});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({githubToken: 'secret-token'})
-      );
+      const apiRequest = testServer
+        .getRequests()
+        .find(r => r.pathname.includes('/releases/tags/'));
+      expect(apiRequest.headers.authorization).toBe('token secret-token');
     });
   });
 
@@ -214,27 +217,25 @@ describe('download module', () => {
     });
 
     beforeEach(() => {
+      testServer.get('/repos/kubernetes-sigs/cri-tools/releases/tags/v1.35.0', {
+        assets: [
+          {
+            name: 'crictl-windows-amd64.exe',
+            browser_download_url: `${baseUrl}/invalid`
+          },
+          {
+            name: 'crictl-linux-amd64.tar.gz',
+            browser_download_url: `${baseUrl}/download/crictl.tar.gz`
+          },
+          {
+            name: 'crictl-linux-amd64.sha256',
+            browser_download_url: `${baseUrl}/invalid`
+          }
+        ]
+      });
       testServer.get('/download/crictl.tar.gz', () => ({
         binary: crictlTarball
       }));
-      github.gitHubRequest.mockResolvedValue({
-        data: {
-          assets: [
-            {
-              name: 'crictl-windows-amd64.exe',
-              browser_download_url: `${baseUrl}/invalid`
-            },
-            {
-              name: 'crictl-linux-amd64.tar.gz',
-              browser_download_url: `${baseUrl}/download/crictl.tar.gz`
-            },
-            {
-              name: 'crictl-linux-amd64.sha256',
-              browser_download_url: `${baseUrl}/invalid`
-            }
-          ]
-        }
-      });
       // extractTar destination is /usr/local/bin (not writable without sudo)
       jest.spyOn(tc, 'extractTar').mockImplementation(async tarPath => {
         if (!fs.existsSync(tarPath)) {
@@ -264,18 +265,21 @@ describe('download module', () => {
 
     test('requests the pinned release tag', async () => {
       await download.installCriCtl({});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: expect.stringContaining('/cri-tools/releases/tags/v1.35.0')
-        })
+      expect(testServer.getRequests()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pathname: '/repos/kubernetes-sigs/cri-tools/releases/tags/v1.35.0'
+          })
+        ])
       );
     });
 
     test('forwards github token', async () => {
       await download.installCriCtl({githubToken: 'secret-token'});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({githubToken: 'secret-token'})
-      );
+      const apiRequest = testServer
+        .getRequests()
+        .find(r => r.pathname.includes('/releases/tags/'));
+      expect(apiRequest.headers.authorization).toBe('token secret-token');
     });
   });
 
@@ -299,49 +303,37 @@ describe('download module', () => {
     });
 
     beforeEach(() => {
+      testServer.get('/repos/Mirantis/cri-dockerd/releases/tags/v0.3.24', {
+        assets: [
+          {
+            name: 'cri-dockerd-0.3.4-3.el7.src.rpm',
+            browser_download_url: `${baseUrl}/invalid`
+          },
+          {
+            name: 'cri-dockerd-v0.2.0-darwin-arm64.tar.gz',
+            browser_download_url: `${baseUrl}/invalid`
+          },
+          {
+            name: 'cri-dockerd-0.3.4.arm64.tgz',
+            browser_download_url: `${baseUrl}/invalid`
+          },
+          {
+            name: 'cri-dockerd-0.3.4.amd64.tgz',
+            browser_download_url: `${baseUrl}/download/cri-dockerd.tgz`
+          },
+          {
+            name: 'cri-dockerd-v0.2.0-linux-amd64.tar.gz.md5',
+            browser_download_url: `${baseUrl}/invalid`
+          }
+        ]
+      });
       testServer.get('/download/cri-dockerd.tgz', () => ({
         binary: binaryTarball
       }));
-      testServer.get('/download/cri-dockerd-source.tar.gz', () => ({
-        binary: sourceTarball
-      }));
-      github.gitHubRequest.mockResolvedValue({
-        data: {
-          assets: [
-            {
-              name: 'cri-dockerd-0.3.4-3.el7.src.rpm',
-              browser_download_url: `${baseUrl}/invalid`
-            },
-            {
-              name: 'cri-dockerd-v0.2.0-darwin-arm64.tar.gz',
-              browser_download_url: `${baseUrl}/invalid`
-            },
-            {
-              name: 'cri-dockerd-0.3.4.arm64.tgz',
-              browser_download_url: `${baseUrl}/invalid`
-            },
-            {
-              name: 'cri-dockerd-0.3.4.amd64.tgz',
-              browser_download_url: `${baseUrl}/download/cri-dockerd.tgz`
-            },
-            {
-              name: 'cri-dockerd-v0.2.0-linux-amd64.tar.gz.md5',
-              browser_download_url: `${baseUrl}/invalid`
-            }
-          ]
-        }
-      });
-
-      // Redirect hardcoded source tarball URL to test server
-      const realDownloadTool = tc.downloadTool.bind(tc);
-      jest.spyOn(tc, 'downloadTool').mockImplementation(async url => {
-        if (url.includes('github.com/Mirantis/cri-dockerd/archive')) {
-          return realDownloadTool(
-            `${baseUrl}/download/cri-dockerd-source.tar.gz`
-          );
-        }
-        return realDownloadTool(url);
-      });
+      testServer.get(
+        '/Mirantis/cri-dockerd/archive/refs/tags/v0.3.24.tar.gz',
+        () => ({binary: sourceTarball})
+      );
 
       serviceFiles = {
         '/etc/systemd/system/cri-docker.service': SERVICE_FILE_CONTENT,
@@ -368,7 +360,6 @@ describe('download module', () => {
     });
 
     afterEach(() => {
-      tc.downloadTool.mockRestore();
       fs.readFileSync.mockRestore();
       fs.writeFileSync.mockRestore();
     });
@@ -400,9 +391,10 @@ describe('download module', () => {
 
     test('forwards github token', async () => {
       await download.installCriDockerd({githubToken: 'secret-token'});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({githubToken: 'secret-token'})
-      );
+      const apiRequest = testServer
+        .getRequests()
+        .find(r => r.pathname.includes('/releases/tags/'));
+      expect(apiRequest.headers.authorization).toBe('token secret-token');
     });
 
     describe('systemd service setup', () => {
@@ -441,12 +433,12 @@ describe('download module', () => {
 
     test('requests the pinned release tag', async () => {
       await download.installCriDockerd({});
-      expect(github.gitHubRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: expect.stringContaining(
-            '/Mirantis/cri-dockerd/releases/tags/v0.3.24'
-          )
-        })
+      expect(testServer.getRequests()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pathname: '/repos/Mirantis/cri-dockerd/releases/tags/v0.3.24'
+          })
+        ])
       );
     });
   });
