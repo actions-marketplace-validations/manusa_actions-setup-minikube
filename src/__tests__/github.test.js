@@ -1,64 +1,80 @@
 'use strict';
 
-describe('github module test suite', () => {
-  let axios;
-  let github;
-  beforeEach(() => {
-    jest.resetModules();
-    jest.mock('axios');
-    axios = require('axios');
-    github = require('../github');
+const {createHttpTestServer} = require('./test-utils/http-test-server');
+const {gitHubRequest} = require('../github');
+
+describe('gitHubRequest', () => {
+  let testServer;
+  let baseUrl;
+
+  beforeAll(async () => {
+    testServer = createHttpTestServer();
+    const port = await testServer.start();
+    baseUrl = `http://127.0.0.1:${port}`;
   });
-  describe('gitHubRequest', () => {
-    describe('with github token', () => {
-      test('should set Authorization header', async () => {
-        // Given
-        axios.mockResolvedValue({status: 200});
-        // When
-        await github.gitHubRequest({
-          url: 'https://api.github.com/repos/o/r/releases/tags/v1',
-          githubToken: 'secret-token'
-        });
-        // Then
-        expect(axios).toHaveBeenCalledWith(
-          expect.objectContaining({
-            headers: {Authorization: 'token secret-token'}
-          })
-        );
+
+  afterAll(async () => {
+    await testServer.stop();
+  });
+
+  beforeEach(() => {
+    testServer.clearRoutes();
+    testServer.clearRequests();
+    testServer.get('/repos/o/r/releases/tags/v1', {tag_name: 'v1'});
+  });
+
+  describe('with github token', () => {
+    let result;
+
+    beforeEach(async () => {
+      result = await gitHubRequest({
+        url: `${baseUrl}/repos/o/r/releases/tags/v1`,
+        githubToken: 'secret-token'
       });
     });
-    describe('without github token', () => {
-      test('should not set Authorization header', async () => {
-        // Given
-        axios.mockResolvedValue({status: 200});
-        // When
-        await github.gitHubRequest({
-          url: 'https://api.github.com/repos/o/r/releases/tags/v1'
-        });
-        // Then
-        expect(axios).toHaveBeenCalledWith(
-          expect.objectContaining({
-            headers: {}
-          })
-        );
+
+    test('sends Authorization header', () => {
+      const request = testServer.getLastRequest();
+      expect(request.headers.authorization).toBe('token secret-token');
+    });
+
+    test('returns response data', () => {
+      expect(result.data).toEqual({tag_name: 'v1'});
+    });
+  });
+
+  describe('without github token', () => {
+    let result;
+
+    beforeEach(async () => {
+      result = await gitHubRequest({
+        url: `${baseUrl}/repos/o/r/releases/tags/v1`
       });
     });
-    describe('with additional options', () => {
-      test('should pass options to axios', async () => {
-        // Given
-        axios.mockResolvedValue({status: 200});
-        const validateStatus = s => s === 200;
-        // When
-        await github.gitHubRequest({
-          url: 'https://api.github.com/test',
-          githubToken: 'token',
-          options: {validateStatus}
-        });
-        // Then
-        expect(axios).toHaveBeenCalledWith(
-          expect.objectContaining({validateStatus})
-        );
+
+    test('does not send Authorization header', () => {
+      const request = testServer.getLastRequest();
+      expect(request.headers.authorization).toBeUndefined();
+    });
+
+    test('returns response data', () => {
+      expect(result.data).toEqual({tag_name: 'v1'});
+    });
+  });
+
+  describe('with additional options', () => {
+    test('uses GET method by default', async () => {
+      await gitHubRequest({url: `${baseUrl}/repos/o/r/releases/tags/v1`});
+      const request = testServer.getLastRequest();
+      expect(request.method).toBe('GET');
+    });
+
+    test('respects validateStatus option', async () => {
+      const result = await gitHubRequest({
+        url: `${baseUrl}/not-found`,
+        options: {validateStatus: status => status === 404}
       });
+      expect(result.status).toBe(404);
     });
   });
 });
