@@ -1,9 +1,9 @@
 'use strict';
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const childProcess = require('child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const childProcess = require('node:child_process');
 const {createHttpTestServer} = require('./test-utils/http-test-server');
 
 // Only mock modules with hardcoded external URLs or system commands

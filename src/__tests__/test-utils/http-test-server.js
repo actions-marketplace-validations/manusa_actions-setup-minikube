@@ -1,6 +1,6 @@
 'use strict';
 
-const {createServer} = require('http');
+const {createServer} = require('node:http');
 
 const createHttpTestServer = () => {
   let server = null;

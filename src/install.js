@@ -3,7 +3,7 @@
 const core = require('@actions/core');
 const execSync = require('./exec').execSync;
 const logExecSync = require('./exec').logExecSync;
-const path = require('path');
+const path = require('node:path');
 const io = require('@actions/io');
 const {
   checkKubernetesVersion,

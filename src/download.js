@@ -2,7 +2,7 @@
 
 const core = require('@actions/core');
 const tc = require('@actions/tool-cache');
-const fs = require('fs');
+const fs = require('node:fs');
 const {logExecSync} = require('./exec');
 const {gitHubRequest} = require('./github');
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 const originalExistsSync = fs.existsSync.bind(fs);
 const originalReadFileSync = fs.readFileSync.bind(fs);
