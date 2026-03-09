@@ -47,15 +47,17 @@ This is a GitHub Action and cannot be run directly. Test locally by:
 src/
   index.js              # Entry point - orchestrates the setup process
   check-environment.js  # Validates Ubuntu version (18, 20, 22, 24)
-  load-inputs.js        # Loads action inputs via @actions/core
+  check-kubernetes-version.js # Validates K8s version against Minikube's supported list
   configure-environment.js # Prepares system (apt packages, Docker, CNI plugins)
   download.js           # Downloads binaries from GitHub releases (Minikube, CNI plugins, crictl, cri-dockerd)
-  install.js            # Installs and starts Minikube
-  exec.js               # Shell command execution utilities
   error-handler.js      # Global error handling
+  exec.js               # Shell command execution utilities
+  github.js             # GitHub API request utility (authenticated/unauthenticated)
+  install.js            # Installs and starts Minikube
+  load-inputs.js        # Loads action inputs via @actions/core
   __tests__/            # Jest unit tests (mirror src/ structure)
 
-action.yml              # GitHub Action definition
+action.yml              # GitHub Action definition (outputs: `force`)
 .github/workflows/
   check.yml             # CI: format check + unit tests
   runner.yml            # E2E tests: runs action against multiple K8s versions
@@ -63,18 +65,20 @@ action.yml              # GitHub Action definition
 
 ### Design Patterns
 
-- **Modular pipeline**: `index.js` orchestrates discrete steps (check, load, configure, download, install)
+- **Modular pipeline**: `index.js` orchestrates: `checkEnvironment()` → `loadInputs()` → `configureEnvironment(inputs)` → `download.downloadMinikube(inputs)` → `install(downloadedFile, inputs)`. Note: binary downloads for CNI plugins, crictl, and cri-dockerd happen inside `configureEnvironment()`, not as a separate pipeline step.
 - **GitHub Actions toolkit**: Uses `@actions/core` for inputs/outputs, `@actions/tool-cache` for downloads
-- **GitHub API integration**: Uses Axios to fetch release information from GitHub API (supports authenticated requests via `github token` input)
+- **GitHub API integration**: `src/github.js` provides a `gitHubRequest` utility wrapping Axios for authenticated/unauthenticated GitHub API calls. Used by `download.js` and `check-kubernetes-version.js`.
 - **Driver-specific logic**: Different setup paths for `none` vs `docker` drivers (none requires CNI plugins, crictl, cri-dockerd)
+- **Kubernetes version validation**: `check-kubernetes-version.js` checks if the requested K8s version is in Minikube's built-in supported list. If not, it verifies the version exists as a GitHub release and returns `UNSUPPORTED` (triggering `--force` flag). If the version doesn't exist at all, it throws an error.
 
 ### Key Dependencies
 
 **npm packages (in `package.json`):**
 - `@actions/core` - Action inputs, outputs, and logging
-- `@actions/tool-cache` - Binary downloads and caching
+- `@actions/github` - GitHub context utilities
 - `@actions/io` - File system operations
-- `axios` - HTTP requests to GitHub API
+- `@actions/tool-cache` - Binary downloads and caching
+- `axios` - HTTP requests to GitHub API (via `src/github.js`)
 
 **Binary dependencies (pinned versions in `src/download.js`):**
 - **CNI plugins** (`containernetworking/plugins`) - Required by cri-dockerd and recent Minikube releases for container networking
@@ -88,6 +92,7 @@ These binaries are downloaded at runtime from GitHub releases. Their versions ar
 ### Formatting
 
 Prettier is configured via `.prettierrc.json`:
+- Semicolons enabled
 - Single quotes
 - No trailing commas
 - No bracket spacing (`{foo}` not `{ foo }`)
