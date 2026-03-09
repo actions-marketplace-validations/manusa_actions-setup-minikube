@@ -1,96 +1,86 @@
-describe('check-environment module test suite', () => {
+'use strict';
+
+const fs = require('fs');
+
+const originalExistsSync = fs.existsSync.bind(fs);
+const originalReadFileSync = fs.readFileSync.bind(fs);
+
+describe('checkEnvironment', () => {
   let checkEnvironment;
-  let fs;
+  let originalPlatform;
+
   beforeEach(() => {
     jest.resetModules();
-    jest.mock('fs');
-    checkEnvironment = require('../check-environment');
-    fs = require('fs');
+    originalPlatform = process.platform;
   });
-  describe('checkEnvironment', () => {
-    test('OS is windows, should throw Error', () => {
-      // Given
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', {value: originalPlatform});
+    jest.restoreAllMocks();
+  });
+
+  describe('on non-Linux platform', () => {
+    beforeEach(() => {
       Object.defineProperty(process, 'platform', {value: 'win32'});
-      process.platform = 'win32';
-      // When - Then
-      expect(checkEnvironment).toThrow(
-        'Unsupported OS, action only works in Ubuntu 18, 20, 22, or 24'
-      );
+      checkEnvironment = require('../check-environment');
     });
-    test('OS is Linux but not Ubuntu, should throw Error', () => {
-      // Given
-      Object.defineProperty(process, 'platform', {value: 'linux'});
-      fs.existsSync.mockImplementation(() => false);
-      fs.readFileSync.mockImplementation(() => 'SOME DIFFERENT OS');
-      // When - Then
-      expect(checkEnvironment).toThrow(
-        'Unsupported OS, action only works in Ubuntu 18, 20, 22, or 24'
-      );
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).toHaveBeenCalledTimes(0);
+
+    test('throws unsupported OS error', () => {
+      expect(checkEnvironment).toThrow(/Unsupported OS/);
     });
-    test('OS is Linux but not Ubuntu 18, should throw Error', () => {
-      // Given
+  });
+
+  describe('on Linux without /etc/os-release', () => {
+    beforeEach(() => {
       Object.defineProperty(process, 'platform', {value: 'linux'});
-      fs.existsSync.mockImplementation(() => true);
-      fs.readFileSync.mockImplementation(() => 'SOME DIFFERENT OS');
-      // When - Then
-      expect(checkEnvironment).toThrow(
-        'Unsupported OS, action only works in Ubuntu 18, 20, 22, or 24'
-      );
-      expect(fs.existsSync).toHaveBeenCalled();
-      expect(fs.readFileSync).toHaveBeenCalled();
+      jest.spyOn(fs, 'existsSync').mockImplementation(p => {
+        if (p === '/etc/os-release') return false;
+        return originalExistsSync(p);
+      });
+      checkEnvironment = require('../check-environment');
     });
-    test('OS is Linux and Ubuntu 18, should not throw Error', () => {
-      // Given
-      Object.defineProperty(process, 'platform', {value: 'linux'});
-      fs.existsSync.mockImplementation(() => true);
-      fs.readFileSync.mockImplementation(
-        () => `
-        NAME="Ubuntu"
-        VERSION="18.04.3 LTS (Bionic Beaver)"
-        `
-      );
-      // When - Then
-      expect(checkEnvironment).not.toThrow();
+
+    test('throws unsupported OS error', () => {
+      expect(checkEnvironment).toThrow(/Unsupported OS/);
     });
-    test('OS is Linux and Ubuntu 20, should not throw Error', () => {
-      // Given
+  });
+
+  describe('on Linux with non-Ubuntu os-release', () => {
+    beforeEach(() => {
       Object.defineProperty(process, 'platform', {value: 'linux'});
-      fs.existsSync.mockImplementation(() => true);
-      fs.readFileSync.mockImplementation(
-        () => `
-        NAME="Ubuntu"
-        VERSION="20.04.1 LTS (Focal Fossa)"
-        `
-      );
-      // When - Then
-      expect(checkEnvironment).not.toThrow();
+      jest.spyOn(fs, 'existsSync').mockImplementation(p => {
+        if (p === '/etc/os-release') return true;
+        return originalExistsSync(p);
+      });
+      jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...args) => {
+        if (p === '/etc/os-release') return 'NAME="Fedora"\nVERSION="39"';
+        return originalReadFileSync(p, ...args);
+      });
+      checkEnvironment = require('../check-environment');
     });
-    test('OS is Linux and Ubuntu 22, should not throw Error', () => {
-      // Given
-      Object.defineProperty(process, 'platform', {value: 'linux'});
-      fs.existsSync.mockImplementation(() => true);
-      fs.readFileSync.mockImplementation(
-        () => `
-        NAME="Ubuntu"
-        VERSION="22.04.1 LTS (Jammy Jellyfish)"
-        `
-      );
-      // When - Then
-      expect(checkEnvironment).not.toThrow();
+
+    test('throws unsupported OS error', () => {
+      expect(checkEnvironment).toThrow(/Unsupported OS/);
     });
-    test('OS is Linux and Ubuntu 24, should not throw Error', () => {
-      // Given
+  });
+
+  describe.each(['18', '20', '22', '24'])('on Ubuntu %s', version => {
+    beforeEach(() => {
       Object.defineProperty(process, 'platform', {value: 'linux'});
-      fs.existsSync.mockImplementation(() => true);
-      fs.readFileSync.mockImplementation(
-        () => `
-        NAME="Ubuntu"
-        VERSION="24.04.1 LTS (Noble Numbat)"
-        `
-      );
-      // When - Then
+      jest.spyOn(fs, 'existsSync').mockImplementation(p => {
+        if (p === '/etc/os-release') return true;
+        return originalExistsSync(p);
+      });
+      jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...args) => {
+        if (p === '/etc/os-release') {
+          return `NAME="Ubuntu"\nVERSION="${version}.04.1 LTS"`;
+        }
+        return originalReadFileSync(p, ...args);
+      });
+      checkEnvironment = require('../check-environment');
+    });
+
+    test('does not throw', () => {
       expect(checkEnvironment).not.toThrow();
     });
   });

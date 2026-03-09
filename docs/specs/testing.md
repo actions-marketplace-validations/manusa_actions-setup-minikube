@@ -97,21 +97,21 @@ describe('moduleName', () => {
 |--------|---------------|
 | `github.js` | HTTP test server. Pass test server URLs to `gitHubRequest`. Verify auth headers, response handling, option merging with real HTTP |
 | `load-inputs.js` | Set `process.env.INPUT_*` variables directly. `@actions/core.getInput()` reads these from the environment |
+| `exec.js` | Run real commands (`echo`, `false`). Verify output capture vs stdio inheritance, error propagation |
 
 ### Tier 2 — Behavioral with Boundary Mocks
 
 | Module | Mocked Boundaries | Behavioral Coverage |
 |--------|-------------------|---------------------|
 | `error-handler.js` | `@actions/core` | Verify error message propagation, action failure marking |
+| `check-environment.js` | `fs` (selective: `/etc/os-release`) | Throws/doesn't throw for each Ubuntu version. Test behavior, not fs call arguments |
 | `check-kubernetes-version.js` | `child_process` (minikube binary), `@actions/core` | HTTP test server for GitHub API. Test three outcomes: SUPPORTED, UNSUPPORTED, throws |
-| `download.js` | `@actions/tool-cache`, `child_process`, `fs` | HTTP test server for GitHub API. Test asset selection (correct binary chosen from release assets) |
+| `download.js` | `@actions/core`, `../github`, `../exec` | HTTP test server for GitHub API. Real downloads and tar extractions. Test asset selection, file extraction, systemd setup |
 
 ### Tier 3 — Boundary Mocks with Behavioral Style
 
 | Module | Mocked Boundaries | What to Test |
 |--------|-------------------|--------------|
-| `check-environment.js` | `fs` | Throws/doesn't throw for each Ubuntu version. Test behavior, not fs call arguments |
-| `exec.js` | `child_process` | Thin wrapper — verify contract (command passed through, stdio options) |
 | `configure-environment.js` | `child_process`, `download` module | Driver branching: `docker` vs `none` installs different components |
 | `install.js` | `child_process`, `@actions/core`, `@actions/io`, `check-kubernetes-version` | Force flag logic, start command construction, version status handling |
 
@@ -161,12 +161,12 @@ This pattern is:
 
 | Test File | Tests | Mocks | Approach |
 |-----------|-------|-------|----------|
-| `check-environment.test.js` | 6 | fs | Implementation detail |
+| `check-environment.test.js` | 7 | fs (selective) | Behavioral |
 | `check-kubernetes-version.test.js` | 8 | core, exec, github | Behavioral |
 | `configure-environment.test.js` | 10 | exec, download | Implementation detail |
 | `download.test.js` | 19 | core, github, exec | Behavioral |
 | `error-handler.test.js` | 3 | core | Behavioral |
-| `exec.test.js` | 2 | child_process | Implementation detail |
+| `exec.test.js` | 5 | none | Behavioral |
 | `github.test.js` | 6 | none | Behavioral |
 | `install.test.js` | 10 | core, io, path, exec, check-k8s | Mixed |
 | `load-inputs.test.js` | 8 | none | Behavioral |
@@ -191,7 +191,7 @@ Jest ESM requires the `--experimental-vm-modules` Node.js flag. The `jest.unstab
 | Phase 1 | Create HTTP test server utility, refactor `github.test.js` to fully behavioral | Done |
 | Phase 2 | Refactor `load-inputs.test.js` and `error-handler.test.js` — style improvements | Done |
 | Phase 3 | Refactor `check-kubernetes-version.test.js` and `download.test.js` — HTTP test server + reduced mocks | Done |
-| Phase 4 | Refactor `check-environment.test.js` and `exec.test.js` — behavioral style, keep boundary mocks | Not started |
+| Phase 4 | Refactor `check-environment.test.js` and `exec.test.js` — behavioral style, keep boundary mocks | Done |
 | Phase 5 | Refactor `configure-environment.test.js` and `install.test.js` — behavioral style with boundary mocks | Not started |
 | Phase 6 | Convert all tests to ESM syntax (bridge to architecture ESM migration Phase 2) | Not started |
 

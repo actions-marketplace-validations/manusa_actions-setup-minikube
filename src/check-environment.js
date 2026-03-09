@@ -12,7 +12,6 @@ const isUbuntu = version => () => {
     osInfo.indexOf(`VERSION="${version}`) >= 0
   );
 };
-['18', '20', '22', '24'].some(v => isUbuntu(v)());
 const isValidLinux = () =>
   isLinux() && ['18', '20', '22', '24'].some(v => isUbuntu(v)());
 const checkOperatingSystem = () => {

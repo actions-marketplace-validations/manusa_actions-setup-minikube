@@ -1,30 +1,36 @@
-describe('exec module test suite', () => {
+'use strict';
+
+describe('exec', () => {
   let exec;
-  let child_process;
+
   beforeEach(() => {
     jest.resetModules();
-    jest.mock('child_process');
     exec = require('../exec');
-    child_process = require('child_process');
   });
-  test('execSync, should spawn the provided command', () => {
-    // Given
-    child_process.execSync.mockImplementationOnce(() => {});
-    // When
-    exec.execSync('1337');
-    // Then
-    expect(child_process.execSync).toHaveBeenCalledTimes(1);
-    expect(child_process.execSync).toHaveBeenCalledWith('1337');
+
+  describe('execSync', () => {
+    test('returns command output as buffer', () => {
+      const result = exec.execSync('echo hello');
+      expect(result.toString().trim()).toBe('hello');
+    });
+
+    test('throws on non-zero exit code', () => {
+      expect(() => exec.execSync('false')).toThrow();
+    });
   });
-  test('logExecSync, should spawn the provided command with stdio redirect', () => {
-    // Given
-    child_process.execSync.mockImplementationOnce(() => {});
-    // When
-    exec.logExecSync('1337');
-    // Then
-    expect(child_process.execSync).toHaveBeenCalledTimes(1);
-    expect(child_process.execSync).toHaveBeenCalledWith('1337', {
-      stdio: 'inherit'
+
+  describe('logExecSync', () => {
+    test('runs the command successfully', () => {
+      expect(() => exec.logExecSync('echo hello')).not.toThrow();
+    });
+
+    test('does not capture output', () => {
+      const result = exec.logExecSync('echo hello');
+      expect(result).toBeNull();
+    });
+
+    test('throws on non-zero exit code', () => {
+      expect(() => exec.logExecSync('false')).toThrow();
     });
   });
 });
