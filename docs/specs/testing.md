@@ -189,7 +189,7 @@ Jest ESM requires the `--experimental-vm-modules` Node.js flag. The `jest.unstab
 | Phase | Description | Status |
 |-------|-------------|--------|
 | Phase 1 | Create HTTP test server utility, refactor `github.test.js` to fully behavioral | Done |
-| Phase 2 | Refactor `load-inputs.test.js` and `error-handler.test.js` — style improvements | Not started |
+| Phase 2 | Refactor `load-inputs.test.js` and `error-handler.test.js` — style improvements | Done |
 | Phase 3 | Refactor `check-kubernetes-version.test.js` and `download.test.js` — HTTP test server + reduced mocks | Not started |
 | Phase 4 | Refactor `check-environment.test.js` and `exec.test.js` — behavioral style, keep boundary mocks | Not started |
 | Phase 5 | Refactor `configure-environment.test.js` and `install.test.js` — behavioral style with boundary mocks | Not started |

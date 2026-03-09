@@ -1,30 +1,50 @@
-describe('load-inputs module test suite', () => {
-  let loadInputs;
+'use strict';
+
+const loadInputs = require('../load-inputs');
+
+describe('loadInputs', () => {
+  let originalEnv;
+
   beforeEach(() => {
-    loadInputs = require('../load-inputs');
+    originalEnv = process.env;
     process.env = {};
   });
-  describe('loadInputs', () => {
-    test('Required variables in env, should return valid inputs', () => {
-      // Given
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe('with only required variables', () => {
+    let result;
+
+    beforeEach(() => {
       process.env = {
         INPUT_MINIKUBE_VERSION: 'v1.33.7',
         INPUT_KUBERNETES_VERSION: 'v1.3.37'
       };
-      // When
-      const result = loadInputs();
-      // Then
-      expect(result).toEqual({
-        minikubeVersion: 'v1.33.7',
-        kubernetesVersion: 'v1.3.37',
-        githubToken: '',
-        driver: '',
-        containerRuntime: '',
-        startArgs: ''
-      });
+      result = loadInputs();
     });
-    test('All variables in env, should return valid inputs', () => {
-      // Given
+
+    test('returns minikube version', () => {
+      expect(result.minikubeVersion).toBe('v1.33.7');
+    });
+
+    test('returns kubernetes version', () => {
+      expect(result.kubernetesVersion).toBe('v1.3.37');
+    });
+
+    test('returns empty string for optional inputs', () => {
+      expect(result.githubToken).toBe('');
+      expect(result.driver).toBe('');
+      expect(result.containerRuntime).toBe('');
+      expect(result.startArgs).toBe('');
+    });
+  });
+
+  describe('with all variables', () => {
+    let result;
+
+    beforeEach(() => {
       process.env = {
         INPUT_MINIKUBE_VERSION: 'v1.33.7',
         INPUT_KUBERNETES_VERSION: 'v1.3.37',
@@ -33,30 +53,28 @@ describe('load-inputs module test suite', () => {
         INPUT_CONTAINER_RUNTIME: 'cri-o',
         INPUT_START_ARGS: '--mount=Aitana --character=Alex'
       };
-      // When
-      const result = loadInputs();
-      // Then
-      expect(result).toEqual({
-        minikubeVersion: 'v1.33.7',
-        kubernetesVersion: 'v1.3.37',
-        githubToken: 'secret-token',
-        driver: 'minikube-driver',
-        containerRuntime: 'cri-o',
-        startArgs: '--mount=Aitana --character=Alex'
-      });
+      result = loadInputs();
     });
-    test('Required variables NOT in env, should throw error', () => {
-      // Given
-      process.env = {};
-      // When - Then
-      expect(loadInputs).toThrow(
-        'Input required and not supplied: minikube version'
-      );
+
+    test('returns github token', () => {
+      expect(result.githubToken).toBe('secret-token');
     });
-    test('Empty env, should throw error', () => {
-      // Given
-      process.env = {};
-      // When - Then
+
+    test('returns driver', () => {
+      expect(result.driver).toBe('minikube-driver');
+    });
+
+    test('returns container runtime', () => {
+      expect(result.containerRuntime).toBe('cri-o');
+    });
+
+    test('returns start args', () => {
+      expect(result.startArgs).toBe('--mount=Aitana --character=Alex');
+    });
+  });
+
+  describe('with missing required variables', () => {
+    test('throws error for missing minikube version', () => {
       expect(loadInputs).toThrow(
         'Input required and not supplied: minikube version'
       );
