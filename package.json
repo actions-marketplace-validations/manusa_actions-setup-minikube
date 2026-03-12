@@ -40,6 +40,9 @@
     "prettier": "3.8.1"
   },
   "jest": {
+    "setupFiles": [
+      "<rootDir>/src/__tests__/test-utils/jest-setup.js"
+    ],
     "testPathIgnorePatterns": [
       "/node_modules/",
       "<rootDir>/src/__tests__/test-utils/"

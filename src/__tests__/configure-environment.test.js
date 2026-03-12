@@ -1,23 +1,49 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
 describe('configureEnvironment', () => {
   let configureEnvironment;
-  let logExecSync;
   let download;
   let stdoutOutput;
   let originalStdoutWrite;
+  let stubBinDir;
+  let execLogPath;
+  let originalPath;
 
   beforeEach(() => {
     jest.resetModules();
-    jest.mock('../exec');
     jest.mock('../download');
+
+    // Stub binaries: log commands to a file instead of
+    // running real sudo/docker
+    stubBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stub-bin-'));
+    execLogPath = path.join(stubBinDir, 'exec.log');
+    fs.writeFileSync(
+      path.join(stubBinDir, 'sudo'),
+      ['#!/bin/sh', `echo "sudo $*" >> "${execLogPath}"`].join('\n'),
+      {mode: 0o755}
+    );
+    fs.writeFileSync(
+      path.join(stubBinDir, 'docker'),
+      [
+        '#!/bin/sh',
+        `echo "docker $*" >> "${execLogPath}"`,
+        'echo "24.0.0 - 24.0.0"'
+      ].join('\n'),
+      {mode: 0o755}
+    );
+    originalPath = process.env.PATH;
+    process.env.PATH = `${stubBinDir}${path.delimiter}${originalPath}`;
+
     configureEnvironment = require('../configure-environment');
-    logExecSync = require('../exec').logExecSync;
     download = require('../download');
-    logExecSync.mockImplementation(() => {});
     download.installCniPlugins.mockResolvedValue();
     download.installCriCtl.mockResolvedValue();
     download.installCriDockerd.mockResolvedValue();
+
     stdoutOutput = '';
     originalStdoutWrite = process.stdout.write;
     process.stdout.write = (chunk, ...args) => {
@@ -30,7 +56,17 @@ describe('configureEnvironment', () => {
 
   afterEach(() => {
     process.stdout.write = originalStdoutWrite;
+    process.env.PATH = originalPath;
+    fs.rmSync(stubBinDir, {recursive: true, force: true});
   });
+
+  const getExecLog = () => {
+    try {
+      return fs.readFileSync(execLogPath, 'utf8');
+    } catch {
+      return '';
+    }
+  };
 
   describe('common setup', () => {
     beforeEach(async () => {
@@ -38,15 +74,11 @@ describe('configureEnvironment', () => {
     });
 
     test('installs conntrack', () => {
-      expect(logExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('conntrack')
-      );
+      expect(getExecLog()).toContain('conntrack');
     });
 
     test('disables fs.protected_regular', () => {
-      expect(logExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('fs.protected_regular=0')
-      );
+      expect(getExecLog()).toContain('fs.protected_regular=0');
     });
 
     test('logs environment configuration message', () => {
@@ -62,9 +94,7 @@ describe('configureEnvironment', () => {
     });
 
     test('checks docker availability', () => {
-      expect(logExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('docker version')
-      );
+      expect(getExecLog()).toContain('docker version');
     });
 
     test('logs docker ready message', () => {
@@ -102,9 +132,7 @@ describe('configureEnvironment', () => {
     });
 
     test('does not check docker availability', () => {
-      expect(logExecSync).not.toHaveBeenCalledWith(
-        expect.stringContaining('docker version')
-      );
+      expect(getExecLog()).not.toContain('docker version');
     });
   });
 
