@@ -112,7 +112,7 @@ describe('moduleName', () => {
 
 | Module | Mocked Boundaries | What to Test |
 |--------|-------------------|--------------|
-| `configure-environment.js` | `child_process`, `download` module | Driver branching: `docker` vs `none` installs different components |
+| `configure-environment.js` | `../exec`, `../download` | Driver branching: `docker` vs `none` installs different components |
 | `install.js` | `child_process`, `@actions/core`, `@actions/io`, `check-kubernetes-version` | Force flag logic, start command construction, version status handling |
 
 ### Not Unit-Tested
@@ -163,7 +163,7 @@ This pattern is:
 |-----------|-------|-------|----------|
 | `check-environment.test.js` | 7 | fs (selective) | Behavioral |
 | `check-kubernetes-version.test.js` | 8 | core, exec, github | Behavioral |
-| `configure-environment.test.js` | 11 | exec, download | Behavioral |
+| `configure-environment.test.js` | 13 | exec, download | Behavioral |
 | `download.test.js` | 19 | core, github, exec | Behavioral |
 | `error-handler.test.js` | 3 | core | Behavioral |
 | `exec.test.js` | 5 | none | Behavioral |

@@ -4,10 +4,11 @@ describe('configureEnvironment', () => {
   let configureEnvironment;
   let logExecSync;
   let download;
+  let stdoutOutput;
+  let originalStdoutWrite;
 
   beforeEach(() => {
     jest.resetModules();
-    jest.mock('@actions/core');
     jest.mock('../exec');
     jest.mock('../download');
     configureEnvironment = require('../configure-environment');
@@ -17,6 +18,18 @@ describe('configureEnvironment', () => {
     download.installCniPlugins.mockResolvedValue();
     download.installCriCtl.mockResolvedValue();
     download.installCriDockerd.mockResolvedValue();
+    stdoutOutput = '';
+    originalStdoutWrite = process.stdout.write;
+    process.stdout.write = (chunk, ...args) => {
+      if (typeof chunk === 'string') {
+        stdoutOutput += chunk;
+      }
+      return originalStdoutWrite.call(process.stdout, chunk, ...args);
+    };
+  });
+
+  afterEach(() => {
+    process.stdout.write = originalStdoutWrite;
   });
 
   describe('common setup', () => {
@@ -35,6 +48,12 @@ describe('configureEnvironment', () => {
         expect.stringContaining('fs.protected_regular=0')
       );
     });
+
+    test('logs environment configuration message', () => {
+      expect(stdoutOutput).toContain(
+        'Updating Environment configuration to support Minikube'
+      );
+    });
   });
 
   describe('with driver=docker', () => {
@@ -46,6 +65,10 @@ describe('configureEnvironment', () => {
       expect(logExecSync).toHaveBeenCalledWith(
         expect.stringContaining('docker version')
       );
+    });
+
+    test('logs docker ready message', () => {
+      expect(stdoutOutput).toContain('Docker daemon is ready');
     });
 
     test('does not install CNI plugins', () => {
