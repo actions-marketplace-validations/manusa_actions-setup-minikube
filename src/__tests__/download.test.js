@@ -3,8 +3,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const childProcess = require('node:child_process');
 const {createHttpTestServer} = require('./test-utils/http-test-server');
+const {createTarball} = require('./test-utils/create-tarball');
 
 // Only mock system commands that require root/sudo
 jest.mock('../exec');
@@ -12,23 +12,6 @@ jest.mock('../exec');
 const SERVICE_FILE_CONTENT =
   'ExecStart=/usr/bin/cri-dockerd --container-runtime-endpoint fd://';
 const SOCKET_FILE_CONTENT = 'ListenStream=/var/run/cri-docker.sock';
-
-const createTarball = files => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tar-'));
-  for (const [name, content] of Object.entries(files)) {
-    const filePath = path.join(dir, name);
-    fs.mkdirSync(path.dirname(filePath), {recursive: true});
-    fs.writeFileSync(filePath, content, {mode: 0o755});
-  }
-  const topLevel = [...new Set(Object.keys(files).map(f => f.split('/')[0]))];
-  const tarPath = path.join(dir, 'archive.tar.gz');
-  childProcess.execSync(
-    `tar -czf "${tarPath}" -C "${dir}" ${topLevel.map(n => `"${n}"`).join(' ')}`
-  );
-  const buffer = fs.readFileSync(tarPath);
-  fs.rmSync(dir, {recursive: true, force: true});
-  return buffer;
-};
 
 describe('download module', () => {
   let testServer;
