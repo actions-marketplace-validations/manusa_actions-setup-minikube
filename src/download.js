@@ -2,10 +2,12 @@
 
 const core = require('@actions/core');
 const tc = require('@actions/tool-cache');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const {logExecSync} = require('./exec');
 const {gitHubRequest, apiBaseUrl, serverBaseUrl} = require('./github');
 const {arch} = require('./arch');
+const checksums = require('./checksums');
 
 const isLinux = name => name.indexOf('linux') >= 0;
 const isArch = name => name.indexOf(arch()) >= 0;
@@ -22,7 +24,66 @@ const firstDir = dir =>
     .filter(f => f.isDirectory())
     .map(f => f.name)[0];
 
-const downloadGitHubArtifact = async ({inputs, releaseUrl, assetPredicate}) => {
+const assertSha256Hex = (hex, label) => {
+  // Lowercase only: crypto.digest('hex') and `sha256sum` both emit lowercase,
+  // so an uppercase value would assert OK and then silently fail the equality
+  // check downstream. Reject it here with an actionable message instead.
+  if (typeof hex !== 'string' || !/^[0-9a-f]{64}$/.test(hex)) {
+    throw new Error(
+      `Invalid SHA256 digest for ${label}: expected 64 lowercase hex chars, got ${JSON.stringify(hex)}`
+    );
+  }
+};
+
+const verifySha256File = async (filePath, expectedHex, label) => {
+  assertSha256Hex(expectedHex, label);
+  const actual = crypto
+    .createHash('sha256')
+    .update(await fs.promises.readFile(filePath))
+    .digest('hex');
+  if (actual !== expectedHex) {
+    throw new Error(
+      `SHA256 mismatch for ${label}: expected ${expectedHex}, got ${actual}`
+    );
+  }
+};
+
+const fetchCompanionSha256 = async ({asset, assets, inputs}) => {
+  const digestAsset = assets.find(a => a.name === `${asset.name}.sha256`);
+  if (!digestAsset) {
+    throw new Error(
+      `No .sha256 companion asset published for ${asset.name}. Refusing to install an unverified binary.`
+    );
+  }
+  // `responseType: 'text'` defends against axios JSON auto-decoding the
+  // checksum body if a future GitHub change ever sets application/json on it.
+  const response = await gitHubRequest({
+    url: digestAsset.browser_download_url,
+    githubToken: inputs.githubToken,
+    options: {responseType: 'text'}
+  });
+  const parsed = String(response.data).trim().split(/\s+/)[0];
+  assertSha256Hex(parsed, `${asset.name}.sha256 response body`);
+  return parsed;
+};
+
+const downloadGitHubArtifact = async ({
+  inputs,
+  releaseUrl,
+  assetPredicate,
+  verifyWithCompanionSha256 = false,
+  expectedSha256
+}) => {
+  if (verifyWithCompanionSha256 && expectedSha256) {
+    throw new Error(
+      'downloadGitHubArtifact: both `verifyWithCompanionSha256` and `expectedSha256` were provided; pick exactly one.'
+    );
+  }
+  if (!verifyWithCompanionSha256 && !expectedSha256) {
+    throw new Error(
+      'downloadGitHubArtifact: neither `verifyWithCompanionSha256` nor `expectedSha256` was provided; one is required to verify the download.'
+    );
+  }
   const tagInfo = await gitHubRequest({
     url: releaseUrl,
     githubToken: inputs.githubToken
@@ -34,7 +95,28 @@ const downloadGitHubArtifact = async ({inputs, releaseUrl, assetPredicate}) => {
     );
   }
   core.info(`Downloading from: ${asset.browser_download_url}`);
-  return tc.downloadTool(asset.browser_download_url);
+  const downloadedFile = await tc.downloadTool(asset.browser_download_url);
+  if (verifyWithCompanionSha256) {
+    const expected = await fetchCompanionSha256({
+      asset,
+      assets: tagInfo.data.assets,
+      inputs
+    });
+    await verifySha256File(downloadedFile, expected, asset.name);
+  } else {
+    await verifySha256File(downloadedFile, expectedSha256, asset.name);
+  }
+  return downloadedFile;
+};
+
+// Paired download + verify for URLs that aren't release assets (e.g. GitHub
+// auto-generated source archives). Keeps verification inseparable from the
+// download so a future contributor can't add a bare tc.downloadTool call.
+const downloadVerifiedUrl = async ({url, expectedSha256, label}) => {
+  core.info(`Downloading from: ${url}`);
+  const downloadedFile = await tc.downloadTool(url);
+  await verifySha256File(downloadedFile, expectedSha256, label);
+  return downloadedFile;
 };
 
 const downloadMinikube = async (inputs = {}) => {
@@ -43,7 +125,8 @@ const downloadMinikube = async (inputs = {}) => {
     inputs,
     releaseUrl: `${apiBaseUrl}/repos/kubernetes/minikube/releases/tags/${inputs.minikubeVersion}`,
     assetPredicate: asset =>
-      isLinux(asset.name) && isArch(asset.name) && !isSignature(asset.name)
+      isLinux(asset.name) && isArch(asset.name) && !isSignature(asset.name),
+    verifyWithCompanionSha256: true
   });
 };
 
@@ -60,7 +143,8 @@ const installCniPlugins = async (inputs = {}) => {
       isLinux(asset.name) &&
       isArch(asset.name) &&
       !isSignature(asset.name) &&
-      asset.name.indexOf('cni-plugins') === 0
+      asset.name.indexOf('cni-plugins') === 0,
+    verifyWithCompanionSha256: true
   });
   const extractedTarDir = await tc.extractTar(tar);
   const cniBinDirPath = '/opt/cni/bin';
@@ -79,18 +163,23 @@ const installCriCtl = async (inputs = {}) => {
       isLinux(asset.name) &&
       isArch(asset.name) &&
       !isSignature(asset.name) &&
-      asset.name.indexOf('crictl') === 0
+      asset.name.indexOf('crictl') === 0,
+    verifyWithCompanionSha256: true
   });
   await tc.extractTar(tar, '/usr/local/bin');
 };
 
 const installCriDockerd = async (inputs = {}) => {
   core.info(`Downloading cri-dockerd`);
-  // In case there are future releases, we can explore the usage of the latest release
-  // const tagInfo = await getTagInfo({inputs, releaseUrl});
-  // const tag = tagInfo.data.name;
-  // const releaseUrl = 'https://api.github.com/repos/Mirantis/cri-dockerd/releases/latest';
-  const tag = 'v0.3.24';
+  // Pinned digests live in ./checksums.js because cri-dockerd does not publish
+  // .sha256 companion assets for its .tgz or source archives.
+  const {tag, binarySha256, sourceSha256} = checksums.criDockerd;
+  const expectedBinarySha256 = binarySha256[arch()];
+  if (!expectedBinarySha256) {
+    throw new Error(
+      `No pinned SHA256 for arch=${arch()} in checksums.criDockerd.binarySha256. Update src/checksums.js when adding a new arch.`
+    );
+  }
   const releaseUrl = `${apiBaseUrl}/repos/Mirantis/cri-dockerd/releases/tags/${tag}`;
   const binaryTar = await downloadGitHubArtifact({
     inputs,
@@ -101,7 +190,8 @@ const installCriDockerd = async (inputs = {}) => {
       !isMac(asset.name) &&
       isArch(asset.name) &&
       isTgz(asset.name) &&
-      asset.name.indexOf('cri-dockerd') === 0
+      asset.name.indexOf('cri-dockerd') === 0,
+    expectedSha256: expectedBinarySha256
   });
   // Binary
   const binaryDir = await tc.extractTar(binaryTar);
@@ -111,9 +201,11 @@ const installCriDockerd = async (inputs = {}) => {
   );
   logExecSync(`sudo ln -sf /usr/local/bin/cri-dockerd /usr/bin/cri-dockerd`);
   // Service file
-  const sourceTar = await tc.downloadTool(
-    `${serverBaseUrl}/Mirantis/cri-dockerd/archive/refs/tags/${tag}.tar.gz`
-  );
+  const sourceTar = await downloadVerifiedUrl({
+    url: `${serverBaseUrl}/Mirantis/cri-dockerd/archive/refs/tags/${tag}.tar.gz`,
+    expectedSha256: sourceSha256,
+    label: 'cri-dockerd source archive'
+  });
   const sourceDir = await tc.extractTar(sourceTar);
   const sourceContent = firstDir(sourceDir);
   logExecSync(
@@ -152,5 +244,9 @@ module.exports = {
   downloadMinikube,
   installCniPlugins,
   installCriCtl,
-  installCriDockerd
+  installCriDockerd,
+  /** @internal — exposed for testing the verification funnel. */
+  downloadGitHubArtifact,
+  /** @internal — exposed for testing the verification funnel. */
+  verifySha256File
 };
