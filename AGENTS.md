@@ -300,11 +300,13 @@ Releases use lightweight tags and a commit message format of `[RELEASE] Release 
 6. Commit with sign-off: `git commit --signoff -m "[RELEASE] Release v<version>"`
 7. Create a lightweight tag: `git tag v<version>`
 8. Push: `git push origin master --tags`
+9. **Publish the GitHub Release manually via the GitHub UI** (https://github.com/manusa/actions-setup-minikube/releases/new). Select the `v<version>` tag, set the title to `v<version>`, and click "Generate release notes" to auto-populate the body (matches the historical style: a `**Full Changelog**: …compare/v<prev>...v<version>` link plus the PR list). This step is required — pushing the tag alone does not publish a GitHub Release, and downstream consumers and Marketplace listings look at Releases, not raw tags. AI agents should not run `gh release create` for this; leave it to the maintainer.
 
 **Common mistakes to avoid:**
 - **Forgetting to prune dev deps before staging**: `node_modules/.package-lock.json` will have a huge diff with all dev dependencies instead of just the version bump
 - **Forgetting `package-lock.json` and `node_modules/.package-lock.json`**: Both lock files must be in the release commit — check against previous releases (e.g., `git show e5e04be --stat`)
 - **Running `npm install` instead of `--package-lock-only`**: This reinstalls dev deps into `node_modules/`, requiring another prune
+- **Stopping after `git push`**: the tag exists on the remote but no GitHub Release is published until step 9 — Marketplace and the Releases page will still show the previous version as latest.
 
 ## Troubleshooting
 
